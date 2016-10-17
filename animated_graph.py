@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 #The MIT License (MIT)
 #
 #Copyright (c) 2016 Julius Ikkala
@@ -19,7 +20,6 @@
 #LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 #OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 #SOFTWARE.
-#!/usr/bin/env python3
 import sympy
 import gi
 import cairo
