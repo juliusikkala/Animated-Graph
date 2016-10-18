@@ -27,11 +27,18 @@ import math
 from timeit import default_timer as timer
 
 gi.require_version('Gtk', '3.0')
-from gi.repository import Gtk
+from gi.repository import Gtk, Gdk
 
 class Graph(Gtk.DrawingArea):
     def __init__(self):
         Gtk.DrawingArea.__init__(self)
+        self.add_events(
+            Gdk.EventMask.SCROLL_MASK|
+            Gdk.EventMask.BUTTON_PRESS_MASK|
+            Gdk.EventMask.BUTTON_RELEASE_MASK|
+            Gdk.EventMask.BUTTON_MOTION_MASK
+        )
+
         self.last_update = timer()
 
         self.x, self.t = sympy.symbols("x t")
@@ -39,11 +46,11 @@ class Graph(Gtk.DrawingArea):
         self.function = None
         self.time = 0
         self.scale = 50
-        self.step = 1/self.scale
         self.offset = (0, 0)
         self.axis_width = 2
         self.grid_width = 1
         self.function_width = 1
+        self.dragging = None
 
         self.update()
 
@@ -81,28 +88,24 @@ class Graph(Gtk.DrawingArea):
         origo = (round(w*0.5+self.offset[0]*self.scale),
                  round(h*0.5+self.offset[1]*self.scale))
 
-        #Grid
-        ctx.set_line_width(self.grid_width)
-        ctx.set_source_rgb(0.8,0.8,0.8)
-        grid_x = 0
-        grid_y = 0
-        while grid_x<w/2:
-            ctx.move_to(origo[0]+grid_x+grid_snap, 0)
-            ctx.line_to(origo[0]+grid_x+grid_snap, h)
+        #Grid, don't draw if it is too dense
+        if self.scale>self.grid_width*10:
+            ctx.set_line_width(self.grid_width)
+            ctx.set_source_rgb(0.8,0.8,0.8)
+            grid_x = (origo[0]%self.scale)+grid_snap
+            grid_y = (origo[1]%self.scale)+grid_snap
+            
+            while grid_x<w:
+                ctx.move_to(grid_x, 0)
+                ctx.line_to(grid_x, h)
+                grid_x+=self.scale
 
-            ctx.move_to(origo[0]-grid_x+grid_snap, 0)
-            ctx.line_to(origo[0]-grid_x+grid_snap, h)
-            grid_x+=self.scale
+            while grid_y<h:
+                ctx.move_to(0, grid_y)
+                ctx.line_to(w, grid_y)
+                grid_y+=self.scale
 
-        while grid_y<h/2:
-            ctx.move_to(0, origo[1]+grid_y+grid_snap)
-            ctx.line_to(w, origo[1]+grid_y+grid_snap)
-
-            ctx.move_to(0, origo[1]-grid_y+grid_snap)
-            ctx.line_to(w, origo[1]-grid_y+grid_snap)
-            grid_y+=self.scale
-
-        ctx.stroke()
+            ctx.stroke()
 
         #Axes
         ctx.set_line_width(self.axis_width)
@@ -119,7 +122,7 @@ class Graph(Gtk.DrawingArea):
         if self.function != None:
             first = True
             screen_x = 0
-            screen_step = self.step*self.scale
+            screen_step = 1
 
             while screen_x<w:
                 x = (screen_x-origo[0])/self.scale
@@ -142,6 +145,31 @@ class Graph(Gtk.DrawingArea):
 
         #Keep the ball rolling...
         self.update()
+
+    def do_button_press_event(self, event):
+        if event.button==1:
+            self.dragging = (event.x, event.y)
+        return True
+
+    def do_button_release_event(self, event):
+        if event.button==1:
+            self.dragging = None
+        return True
+
+    def do_motion_notify_event(self, event):
+        if self.dragging is not None:
+            delta = ((event.x-self.dragging[0])/self.scale,
+                     (event.y-self.dragging[1])/self.scale)
+            self.offset = (self.offset[0]+delta[0], self.offset[1]+delta[1])
+            self.dragging = (event.x, event.y)
+        return True
+
+    def do_scroll_event(self, event):
+        if event.direction==Gdk.ScrollDirection.UP:
+            self.scale*=1.1
+        elif event.direction==Gdk.ScrollDirection.DOWN:
+            self.scale*=0.9
+        return True
 
 class GraphWindow(Gtk.Window):
     def __init__(self):
