@@ -41,9 +41,6 @@ class Graph(Gtk.DrawingArea):
 
         self.last_update = timer()
 
-        self.x, self.t = sympy.symbols("x t")
-
-        self.function = None
         self.time = 0
         self.scale = 50
         self.offset = (0, 0)
@@ -51,27 +48,24 @@ class Graph(Gtk.DrawingArea):
         self.grid_width = 1
         self.function_width = 1
         self.dragging = None
+        self.running = False
 
-        self.update()
-
-    def set_function(self, function_str):
-        try:
-            function_expr = sympy.sympify(function_str)
-            if not {self.x, self.t}.issuperset(function_expr.free_symbols):
-                print("Unknown symbols in function "+function_str)
-                self.function = None
-            else:
-                self.function = sympy.lambdify((self.x, self.t), function_expr)
-        except:
-            self.function = None
-
-        self.time = 0
+    def draw_function(self, ctx):
+        pass
 
     def update(self):
         cur_time = timer()
         self.time += cur_time-self.last_update
         self.last_update = cur_time
-        self.queue_draw()
+        if self.running:
+            self.queue_draw()
+
+    def start(self):
+        self.running = True
+        self.update()
+
+    def stop(self):
+        self.running=False
 
     def do_draw(self, ctx):
         w = self.get_allocated_width()
@@ -116,35 +110,11 @@ class Graph(Gtk.DrawingArea):
         ctx.line_to(w, origo[1]+axis_snap)
         ctx.stroke()
 
-        #Render function with given step
-        ctx.set_line_width(self.function_width)
-        ctx.set_source_rgb(0,0,1)
-        if self.function != None:
-            first = True
-            screen_x = 0
-            screen_step = 1
-
-            while screen_x<w:
-                x = (screen_x-origo[0])/self.scale
-                try:
-                    y = self.function(x, self.time)
-                    screen_y = -float(y)*self.scale+origo[1]
-                    margin = 256
-                    screen_y = max(-margin, min(screen_y, h+margin))
-
-                    if first:
-                        ctx.move_to(screen_x, screen_y)
-                        first = False
-                    else:
-                        ctx.line_to(screen_x, screen_y)
-                except:
-                    pass
-                screen_x+=screen_step
-
-        ctx.stroke()
+        self.draw_function(ctx, w, h, origo)
 
         #Keep the ball rolling...
-        self.update()
+        if self.running:
+            self.update()
 
     def do_button_press_event(self, event):
         if event.button==1:
@@ -171,6 +141,109 @@ class Graph(Gtk.DrawingArea):
             self.scale*=0.9
         return True
 
+class CartesianGraph(Graph):
+    def __init__(self):
+        Graph.__init__(self)
+
+        self.x, self.t = sympy.symbols("x t")
+        self.function = None
+
+    def set_function(self, function_str):
+        try:
+            function_expr = sympy.sympify(function_str)
+            if not {self.x, self.t}.issuperset(function_expr.free_symbols):
+                print("Unknown symbols in function "+function_str)
+                self.function = None
+            else:
+                self.function = sympy.lambdify((self.x, self.t), function_expr)
+        except:
+            self.function = None
+        self.time = 0
+
+    def draw_function(self, ctx, w, h, origo):
+        if self.function == None:
+            return
+
+        ctx.set_line_width(self.function_width)
+        ctx.set_source_rgb(0,0,1)
+        first = True
+        screen_x = 0
+        screen_step = 1
+
+        while screen_x<w:
+            x = (screen_x-origo[0])/self.scale
+            try:
+                y = self.function(x, self.time)
+                screen_y = -float(y)*self.scale+origo[1]
+                margin = 256
+                screen_y = max(-margin, min(screen_y, h+margin))
+
+                if first:
+                    ctx.move_to(screen_x, screen_y)
+                    first = False
+                else:
+                    ctx.line_to(screen_x, screen_y)
+            except:
+                #Function was not continuous at this point, don't draw a
+                #continuous line.
+                first = True
+
+            screen_x+=screen_step
+        ctx.stroke()
+
+class PolarGraph(Graph):
+    def __init__(self):
+        Graph.__init__(self)
+
+        self.x, self.t = sympy.symbols("x t")
+        self.function = None
+        self.angle_max = math.pi*2
+        self.angle_step = self.angle_max/1000
+
+    def set_function(self, function_str):
+        try:
+            function_expr = sympy.sympify(function_str)
+            if not {self.x, self.t}.issuperset(function_expr.free_symbols):
+                print("Unknown symbols in function "+function_str)
+                self.function = None
+            else:
+                self.function = sympy.lambdify((self.x, self.t), function_expr)
+        except:
+            self.function = None
+        self.time = 0
+
+    def draw_function(self, ctx, w, h, origo):
+        if self.function == None:
+            return
+
+        ctx.set_line_width(self.function_width)
+        ctx.set_source_rgb(0,0,1)
+        first = True
+        angle = 0
+
+        while angle<self.angle_max:
+            try:
+                r = float(self.function(angle, self.time))
+                x = r*math.cos(angle)
+                y = r*math.sin(angle)
+                screen_x = x*self.scale+origo[0]
+                screen_y = -y*self.scale+origo[1]
+                margin = 256
+                screen_x = max(-margin, min(screen_x, w+margin))
+                screen_y = max(-margin, min(screen_y, h+margin))
+
+                if first:
+                    ctx.move_to(screen_x, screen_y)
+                    first = False
+                else:
+                    ctx.line_to(screen_x, screen_y)
+            except:
+                #Function was not continuous at this point, don't draw a
+                #continuous line.
+                first = True
+            angle += self.angle_step
+        ctx.stroke()
+
 class GraphWindow(Gtk.Window):
     def __init__(self):
         Gtk.Window.__init__(self, title="Animated Graph", border_width=6)
@@ -179,22 +252,52 @@ class GraphWindow(Gtk.Window):
         default_function="sin(t+x)"
 
         vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        self.controls= Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
 
-        self.graph = Graph()
+        self.graph_box = Gtk.Box()
+        self.graph = CartesianGraph()
         self.graph.set_function(default_function)
+        self.graph.start()
+
+        self.graph_box.pack_start(self.graph, True, True, 0)
 
         self.function_entry = Gtk.Entry()
         self.function_entry.set_text(default_function)
         self.function_entry.set_editable(True)
         self.function_entry.connect("activate", self.on_function_activate)
 
-        vbox.pack_start(self.graph, True, True, 0)
-        vbox.pack_start(self.function_entry, False, True, 0)
+        self.function_mode = Gtk.ComboBoxText()
+        self.function_mode.append("cartesian", "Cartesian")
+        self.function_mode.append("polar", "Polar")
+        self.function_mode.connect("changed", self.on_mode_changed)
+        self.function_mode.set_entry_text_column(1)
+        self.function_mode.set_active_id("cartesian")
+
+        self.controls.pack_start(self.function_mode, False, True, 0)
+        self.controls.pack_start(self.function_entry, True, True, 0)
+
+        vbox.pack_start(self.graph_box, True, True, 0)
+        vbox.pack_start(self.controls, False, True, 0)
 
         self.add(vbox)
 
     def on_function_activate(self, widget):
+        self.graph.stop()
         self.graph.set_function(widget.get_text())
+        self.graph.start()
+
+    def on_mode_changed(self, widget):
+        self.graph_box.remove(self.graph)
+        if widget.get_active_id()=="cartesian":
+            self.graph = CartesianGraph()
+            self.graph.set_function(self.function_entry.get_text())
+        elif widget.get_active_id()=="polar":
+            self.graph = PolarGraph()
+            self.graph.set_function(self.function_entry.get_text())
+        self.graph.start()
+        self.graph.show()
+        self.graph_box.pack_start(self.graph, True, True, 0)
+
 
 win = GraphWindow()
 win.connect("delete-event", Gtk.main_quit)
