@@ -228,9 +228,6 @@ class PolarGraph(Graph):
                 y = r*math.sin(angle)
                 screen_x = x*self.scale+origo[0]
                 screen_y = -y*self.scale+origo[1]
-                margin = 256
-                screen_x = max(-margin, min(screen_x, w+margin))
-                screen_y = max(-margin, min(screen_y, h+margin))
 
                 if first:
                     ctx.move_to(screen_x, screen_y)
