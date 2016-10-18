@@ -175,14 +175,19 @@ class CartesianGraph(Graph):
             try:
                 y = self.function(x, self.time)
                 screen_y = -float(y)*self.scale+origo[1]
-                margin = 256
-                screen_y = max(-margin, min(screen_y, h+margin))
+                #Clamp the y value, cairo doesn't like too big coordinates.
+                screen_y_clamped = min(2*h, max(screen_y, -h))
 
                 if first:
-                    ctx.move_to(screen_x, screen_y)
+                    ctx.move_to(screen_x, screen_y_clamped)
                     first = False
                 else:
-                    ctx.line_to(screen_x, screen_y)
+                    ctx.line_to(screen_x, screen_y_clamped)
+                
+                #Value was out of range, make sure next coord doesn't try to
+                #continue from this
+                if screen_y!=screen_y_clamped:
+                    first = True
             except:
                 #Function was not continuous at this point, don't draw a
                 #continuous line.
@@ -228,12 +233,20 @@ class PolarGraph(Graph):
                 y = r*math.sin(angle)
                 screen_x = x*self.scale+origo[0]
                 screen_y = -y*self.scale+origo[1]
+                #Clamp the coordinates, cairo doesn't like too big coordinates.
+                screen_x_clamped = min(2*w, max(screen_x, -w))
+                screen_y_clamped = min(2*h, max(screen_y, -h))
 
                 if first:
                     ctx.move_to(screen_x, screen_y)
                     first = False
                 else:
                     ctx.line_to(screen_x, screen_y)
+
+                #Coord was out of range, make sure next coord doesn't try to
+                #continue from this
+                if screen_y!=screen_y_clamped or screen_x!=screen_x_clamped:
+                    first = True
             except:
                 #Function was not continuous at this point, don't draw a
                 #continuous line.
