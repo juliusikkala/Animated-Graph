@@ -256,58 +256,96 @@ class PolarGraph(Graph):
 
 class GraphWindow(Gtk.Window):
     def __init__(self):
-        Gtk.Window.__init__(self, title="Animated Graph", border_width=6)
+        Gtk.Window.__init__(self, title="Animated Graph", border_width=0)
         self.set_default_size(640, 480)
 
-        default_function="sin(t+x)"
+        self.mode_stack_switcher = Gtk.StackSwitcher()
+        self.mode_stack = Gtk.Stack()
+        self.mode_stack_switcher.set_stack(self.mode_stack)
 
-        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        self.controls= Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        #Cartesian page
+        self.cartesian_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self.cartesian_controls = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL)
+        self.cartesian_controls.set_margin_left(6)
+        self.cartesian_controls.set_margin_right(6)
+        self.cartesian_controls.set_margin_top(6)
+        self.cartesian_controls.set_margin_bottom(6)
 
-        self.graph_box = Gtk.Box()
-        self.graph = CartesianGraph()
-        self.graph.set_function(default_function)
-        self.graph.start()
+        self.cartesian_graph = CartesianGraph()
 
-        self.graph_box.pack_start(self.graph, True, True, 0)
+        self.cartesian_box.pack_start(self.cartesian_graph, True, True, 0)
+        self.cartesian_box.pack_start(self.cartesian_controls, False, True, 0)
 
-        self.function_entry = Gtk.Entry()
-        self.function_entry.set_text(default_function)
-        self.function_entry.set_editable(True)
-        self.function_entry.connect("activate", self.on_function_activate)
+        self.cartesian_label = Gtk.Label()
+        self.cartesian_label.set_text("f(x)=")
+        self.cartesian_label.set_justify(Gtk.Justification.RIGHT)
 
-        self.function_mode = Gtk.ComboBoxText()
-        self.function_mode.append("cartesian", "Cartesian")
-        self.function_mode.append("polar", "Polar")
-        self.function_mode.connect("changed", self.on_mode_changed)
-        self.function_mode.set_entry_text_column(1)
-        self.function_mode.set_active_id("cartesian")
+        self.cartesian_entry = Gtk.Entry()
+        self.cartesian_entry.set_text("sin(t+x)")
+        self.cartesian_entry.set_editable(True)
+        self.cartesian_entry.connect("activate", self.on_cartesian_fn_activate)
 
-        self.controls.pack_start(self.function_mode, False, True, 0)
-        self.controls.pack_start(self.function_entry, True, True, 0)
+        self.cartesian_controls.pack_start(self.cartesian_label, False, True, 0)
+        self.cartesian_controls.pack_start(self.cartesian_entry, True, True, 0)
+        self.on_cartesian_fn_activate(self.cartesian_entry)
 
-        vbox.pack_start(self.graph_box, True, True, 0)
-        vbox.pack_start(self.controls, False, True, 0)
+        #Polar page
+        self.polar_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self.polar_controls = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        self.polar_controls.set_margin_left(6)
+        self.polar_controls.set_margin_right(6)
+        self.polar_controls.set_margin_top(6)
+        self.polar_controls.set_margin_bottom(6)
 
-        self.add(vbox)
+        self.polar_graph = PolarGraph()
 
-    def on_function_activate(self, widget):
-        self.graph.stop()
-        self.graph.set_function(widget.get_text())
-        self.graph.start()
+        self.polar_box.pack_start(self.polar_graph, True, True, 0)
+        self.polar_box.pack_start(self.polar_controls, False, True, 0)
 
-    def on_mode_changed(self, widget):
-        self.graph_box.remove(self.graph)
-        if widget.get_active_id()=="cartesian":
-            self.graph = CartesianGraph()
-            self.graph.set_function(self.function_entry.get_text())
-        elif widget.get_active_id()=="polar":
-            self.graph = PolarGraph()
-            self.graph.set_function(self.function_entry.get_text())
-        self.graph.start()
-        self.graph.show()
-        self.graph_box.pack_start(self.graph, True, True, 0)
+        self.polar_label = Gtk.Label()
+        self.polar_label.set_text("r(x)=")
+        self.polar_label.set_justify(Gtk.Justification.RIGHT)
 
+        self.polar_entry = Gtk.Entry()
+        self.polar_entry.set_text("sin(t*cos(t*x))")
+        self.polar_entry.set_editable(True)
+        self.polar_entry.connect("activate", self.on_polar_fn_activate)
+
+        self.polar_controls.pack_start(self.polar_label, False, True, 0)
+        self.polar_controls.pack_start(self.polar_entry, True, True, 0)
+        self.on_polar_fn_activate(self.polar_entry)
+
+        #Fill stack
+        self.mode_stack.add_titled(self.cartesian_box, "cartesian", "Cartesian")
+        self.mode_stack.add_titled(self.polar_box, "polar", "Polar")
+        self.mode_stack.connect(
+            "notify::visible-child", self.on_mode_changed)
+        self.cartesian_graph.start()
+
+        #Finish UI
+        self.add(self.mode_stack)
+        
+        #Add custom headerbar
+        hb = Gtk.HeaderBar()
+        hb.set_show_close_button(True)
+        hb.set_custom_title(self.mode_stack_switcher)
+        self.set_titlebar(hb)
+
+    def on_cartesian_fn_activate(self, widget):
+        self.cartesian_graph.set_function(widget.get_text())
+
+    def on_polar_fn_activate(self, widget):
+        self.polar_graph.set_function(widget.get_text())
+
+    def on_mode_changed(self, widget, pspec):
+        self.cartesian_graph.stop()
+        self.polar_graph.stop()
+        page = self.mode_stack.get_visible_child_name()
+        if self.mode_stack.get_visible_child_name()=="cartesian":
+            self.cartesian_graph.start()
+        elif self.mode_stack.get_visible_child_name()=="polar":
+            self.polar_graph.start()
 
 win = GraphWindow()
 win.connect("delete-event", Gtk.main_quit)
